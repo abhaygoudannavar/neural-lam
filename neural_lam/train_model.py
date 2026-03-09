@@ -13,6 +13,7 @@ from loguru import logger
 
 # Local
 from . import utils
+from .callbacks import EMACallback
 from .config import load_config_and_datastore
 from .models import GraphLAM, HiLAM, HiLAMParallel
 from .weather_dataset import WeatherDataModule
@@ -143,6 +144,15 @@ def main(input_args=None):
         help="Loss function to use, see metric.py",
     )
     parser.add_argument("--lr", type=float, default=1e-3, help="learning rate")
+    parser.add_argument(
+        "--ema_decay",
+        type=float,
+        default=None,
+        help="EMA decay factor for model weight averaging "
+        "(default: None = disabled). When set (e.g. 0.999), maintains "
+        "a shadow copy of parameters as a running average for "
+        "more stable validation and checkpointing.",
+    )
     parser.add_argument(
         "--val_interval",
         type=int,
@@ -314,6 +324,12 @@ def main(input_args=None):
         mode="min",
         save_last=True,
     )
+
+    # Build callbacks list
+    callbacks = [checkpoint_callback]
+    if args.ema_decay is not None:
+        callbacks.append(EMACallback(decay=args.ema_decay))
+
     trainer = pl.Trainer(
         max_epochs=args.epochs,
         deterministic=True,
@@ -323,7 +339,7 @@ def main(input_args=None):
         devices=devices,
         logger=training_logger,
         log_every_n_steps=1,
-        callbacks=[checkpoint_callback],
+        callbacks=callbacks,
         check_val_every_n_epoch=args.val_interval,
         precision=args.precision,
     )
